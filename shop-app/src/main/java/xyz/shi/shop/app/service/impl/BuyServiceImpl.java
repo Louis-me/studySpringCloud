@@ -1,10 +1,10 @@
 package xyz.shi.shop.app.service.impl;
 
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.TypeReference;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
+import xyz.shi.shop.app.feign.GoodsFeign;
+import xyz.shi.shop.app.feign.OrderFeign;
+import xyz.shi.shop.app.feign.UserFeign;
 import xyz.shi.shop.app.popj.BuyParams;
 import xyz.shi.shop.app.service.BuyService;
 import xyz.shi.shop.common.Result;
@@ -13,29 +13,31 @@ import xyz.shi.shop.common.user.UserBO;
 import xyz.shi.shop.order.pojo.Order;
 
 import java.math.BigDecimal;
-import java.util.Map;
 
 @Service
 public class BuyServiceImpl implements BuyService {
     @Autowired
-    private RestTemplate restTemplate;
+    private UserFeign userFeign;
+    @Autowired
+    private GoodsFeign goodsFeign;
+    @Autowired
+    private OrderFeign orderFeign;
 
     @Override
     public Result submitOrder(BuyParams buyParams) {
-        String userResult = restTemplate.getForObject("http://localhost:8001/user/findUser/" + buyParams.getUserId(), String.class);
-        Result<UserBO> userBOResult = JSON.parseObject(userResult,new TypeReference<Result<UserBO>>(){});
+        Result<UserBO> userBOResult = userFeign.findUser(buyParams.getUserId());
         if (userBOResult == null || !userBOResult.isSuccess() || userBOResult.getData() == null){
             return Result.fail(10001,"用户不存在");
         }
         UserBO userBO = userBOResult.getData();
-
-        String goodsResult = restTemplate.getForObject("http://localhost:8002/goods/findGoods/" + buyParams.getGoodsId(), String.class);
-        Result<GoodsBO> goodsBOResult = JSON.parseObject(goodsResult,new TypeReference<Result<GoodsBO>>(){});
+        System.out.println(userBO);
+        Result<GoodsBO> goodsBOResult = goodsFeign.findGoods(buyParams.getGoodsId());
+        System.out.println(goodsBOResult);
 
         if (goodsBOResult == null || !goodsBOResult.isSuccess() || goodsBOResult.getData() == null){
             return Result.fail(10002,"商品不存在");
         }
-        GoodsBO goodsBO = (GoodsBO) goodsBOResult.getData();
+        GoodsBO goodsBO = goodsBOResult.getData();
         Integer goodsStock = goodsBO.getGoodsStock();
         if (goodsStock < 0){
             return Result.fail(10003,"商品库存不足");
@@ -48,10 +50,10 @@ public class BuyServiceImpl implements BuyService {
         Order orderParams = new Order();
         orderParams.setUserId(userBO.getId());
         orderParams.setGoodsId(goodsBO.getId());
-//        orderParams.setGoodsPrice(goodsBO.getGoodsPrice());
         orderParams.setOrderPrice(goodsBO.getGoodsPrice());
-        String orderResult = restTemplate.postForObject("http://localhost:8003/order/createOrder", orderParams, String.class);
-        Result<String> orderResultString = JSON.parseObject(orderResult,new TypeReference<Result<String>>(){});
+        Result<String> orderResultString = orderFeign.createOrder(orderParams);
+        System.out.println(orderResultString);
+
         if (orderResultString == null || !orderResultString.isSuccess()){
             return Result.fail(10005,"下单失败");
         }
